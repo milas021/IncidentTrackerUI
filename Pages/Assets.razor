@@ -1,9 +1,406 @@
 @page "/assets"
+@using IncidentTrackerUI.Models.Assets
 
 <PageTitle>Assets</PageTitle>
 
 <h1>Assets</h1>
 
-<div class="alert alert-info" role="alert">
-    Welcome to Assets section
+<div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-primary" @onclick="OpenCreateModal">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+        </svg>
+        Add Asset
+    </button>
 </div>
+
+@if (loadError is not null)
+{
+    <div class="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
+        <span>@loadError</span>
+        <button class="btn btn-sm btn-outline-danger" @onclick="LoadAssetsAsync">Retry</button>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+        <span>Loading assets...</span>
+    </div>
+}
+else if (loadError is null)
+{
+    @if (assets.Count == 0)
+    {
+        <div class="alert alert-secondary" role="alert">No assets found.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Code</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th>Installed At</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var asset in assets)
+                    {
+                        <tr>
+                            <td>@asset.Name</td>
+                            <td>@asset.Code</td>
+                            <td>@asset.Type</td>
+                            <td>@(string.IsNullOrWhiteSpace(asset.Location) ? "—" : asset.Location)</td>
+                            <td>@(asset.InstalledAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Edit" @onclick="() => OpenEditModal(asset)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => OpenDeleteModal(asset)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@if (assetPendingDelete is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Delete asset</h5>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CloseDeleteModal" disabled="@isDeleting"></button>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        Are you sure you want to delete asset <strong>@assetPendingDelete.Name</strong>
+                        (code <strong>@assetPendingDelete.Code</strong>)? This action cannot be undone.
+                    </p>
+                    @if (modalError is not null)
+                    {
+                        <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal" disabled="@isDeleting">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAsync" disabled="@isDeleting">
+                        @if (isDeleting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                        }
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (assetBeingEdited is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="editModel" OnValidSubmit="SaveEditAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit asset</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseEditModal" disabled="@isSaving"></button>
+                    </div>
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="editModel.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Code</label>
+                            <InputText class="form-control" @bind-Value="editModel.Code" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Type</label>
+                            <InputSelect class="form-select" @bind-Value="editModel.Type">
+                                @foreach (var type in Enum.GetValues<AssetType>())
+                                {
+                                    <option value="@type">@type</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location</label>
+                            <InputText class="form-control" @bind-Value="editModel.Location" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Installed At</label>
+                            <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="editModel.InstalledAt" />
+                        </div>
+                        @if (modalError is not null)
+                        {
+                            <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseEditModal" disabled="@isSaving">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                            }
+                            Edit
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (isCreateModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="createModel" OnValidSubmit="CreateAssetAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add asset</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseCreateModal" disabled="@isCreating"></button>
+                    </div>
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="createModel.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Code</label>
+                            <InputText class="form-control" @bind-Value="createModel.Code" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Type</label>
+                            <InputSelect class="form-select" @bind-Value="createModel.Type">
+                                @foreach (var type in Enum.GetValues<AssetType>())
+                                {
+                                    <option value="@type">@type</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location</label>
+                            <InputText class="form-control" @bind-Value="createModel.Location" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Installed At</label>
+                            <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="createModel.InstalledAt" />
+                        </div>
+                        @if (modalError is not null)
+                        {
+                            <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal" disabled="@isCreating">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isCreating">
+                            @if (isCreating)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                            }
+                            Add
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@inject IServiceProvider ServiceProvider
+
+@code {
+    private HttpClient Api = default!;
+
+    private List<AssetDto> assets = new();
+    private bool isLoading = true;
+    private string? loadError;
+
+    private AssetDto? assetPendingDelete;
+    private AssetDto? assetBeingEdited;
+    private EditAssetCommand editModel = new();
+    private bool isDeleting;
+    private bool isSaving;
+    private string? modalError;
+
+    private bool isCreateModalOpen;
+    private CreateAssetCommand createModel = new();
+    private bool isCreating;
+
+    protected override Task OnInitializedAsync()
+    {
+        Api = ServiceProvider.GetRequiredKeyedService<HttpClient>("Api");
+        return LoadAssetsAsync();
+    }
+
+    private async Task LoadAssetsAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            assets = await Api.GetFromJsonAsync<List<AssetDto>>("api/Assets", ApiJson.Options) ?? new();
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Failed to load assets: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenDeleteModal(AssetDto asset)
+    {
+        assetPendingDelete = asset;
+        modalError = null;
+    }
+
+    private void CloseDeleteModal()
+    {
+        assetPendingDelete = null;
+        modalError = null;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (assetPendingDelete is null)
+        {
+            return;
+        }
+
+        isDeleting = true;
+        modalError = null;
+        try
+        {
+            var response = await Api.DeleteAsync($"api/Assets/{assetPendingDelete.Id}");
+            response.EnsureSuccessStatusCode();
+            assets.Remove(assetPendingDelete);
+            assetPendingDelete = null;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to delete asset: {ex.Message}";
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private void OpenCreateModal()
+    {
+        isCreateModalOpen = true;
+        createModel = new CreateAssetCommand();
+        modalError = null;
+    }
+
+    private void CloseCreateModal()
+    {
+        isCreateModalOpen = false;
+        modalError = null;
+    }
+
+    private async Task CreateAssetAsync()
+    {
+        isCreating = true;
+        modalError = null;
+        try
+        {
+            var response = await Api.PostAsJsonAsync("api/Assets", createModel, ApiJson.Options);
+            response.EnsureSuccessStatusCode();
+
+            assets = await Api.GetFromJsonAsync<List<AssetDto>>("api/Assets", ApiJson.Options) ?? new();
+            
+            isCreateModalOpen = false;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to create asset: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private void OpenEditModal(AssetDto asset)
+    {
+        assetBeingEdited = asset;
+        editModel = new EditAssetCommand
+        {
+            Name = asset.Name,
+            Code = asset.Code,
+            Type = asset.Type,
+            Location = asset.Location,
+            InstalledAt = asset.InstalledAt
+        };
+        modalError = null;
+    }
+
+    private void CloseEditModal()
+    {
+        assetBeingEdited = null;
+        modalError = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (assetBeingEdited is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        modalError = null;
+        try
+        {
+            var response = await Api.PutAsJsonAsync($"api/Assets/{assetBeingEdited.Id}", editModel, ApiJson.Options);
+            response.EnsureSuccessStatusCode();
+
+            assetBeingEdited.Name = editModel.Name;
+            assetBeingEdited.Code = editModel.Code;
+            assetBeingEdited.Type = editModel.Type;
+            assetBeingEdited.Location = editModel.Location;
+            assetBeingEdited.InstalledAt = editModel.InstalledAt;
+
+            assetBeingEdited = null;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to save asset: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
