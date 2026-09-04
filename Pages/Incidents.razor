@@ -1,9 +1,511 @@
 @page "/incidents"
+@using IncidentTrackerUI.Models.Assets
+@using IncidentTrackerUI.Models.Incidents
 
 <PageTitle>Incidents</PageTitle>
 
 <h1>Incidents</h1>
 
-<div class="alert alert-info" role="alert">
-    Welcome to Incidents section
+<div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-primary" @onclick="OpenCreateModal">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+        </svg>
+        Add Incident
+    </button>
 </div>
+
+@if (loadError is not null)
+{
+    <div class="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
+        <span>@loadError</span>
+        <button class="btn btn-sm btn-outline-danger" @onclick="LoadIncidentsAsync">Retry</button>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+        <span>Loading incidents...</span>
+    </div>
+}
+else if (loadError is null)
+{
+    @if (incidents.Count == 0)
+    {
+        <div class="alert alert-secondary" role="alert">No incidents found.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Asset</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Reported At</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var incident in incidents)
+                    {
+                        <tr>
+                            <td>@incident.Title</td>
+                            <td>@(incident.Asset?.Name ?? "—")</td>
+                            <td><span class="badge @PriorityBadgeClass(incident.Priority)">@incident.Priority</span></td>
+                            <td><span class="badge @StatusBadgeClass(incident.Status)">@incident.Status</span></td>
+                            <td>@incident.ReportedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-success me-1" title="Approve / Confirm"
+                                        disabled="@(incident.Status != IncidentStatus.Reported)"
+                                        @onclick="() => OpenAcknowledgeModal(incident)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Edit" @onclick="() => OpenEditModal(incident)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => OpenDeleteModal(incident)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@* ---- Delete modal (UI only — backend has no DELETE /api/Incidents/{id} yet) ---- *@
+
+@if (incidentPendingDelete is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Delete incident</h5>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CloseDeleteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        Are you sure you want to delete incident <strong>@incidentPendingDelete.Title</strong>?
+                        This action cannot be undone.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAsync">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---- Edit modal: title + description only (UI only — no PUT /api/Incidents/{id} yet) ---- *@
+
+@if (incidentBeingEdited is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="editModel" OnValidSubmit="SaveEditAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit incident</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseEditModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Asset</label>
+                            <input class="form-control" value="@incidentBeingEdited.Asset?.Name" disabled />
+                            <div class="form-text">Asset can't be changed once an incident is reported.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            <InputText class="form-control" @bind-Value="editModel.Title" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---- Add incident modal ---- *@
+
+@if (isCreateModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="createModel" OnValidSubmit="CreateIncidentAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add incident</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseCreateModal" disabled="@isCreating"></button>
+                    </div>
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Asset</label>
+                            <InputSelect class="form-select" @bind-Value="createModel.AssetId">
+                                <option value="@Guid.Empty">Select an asset...</option>
+                                @foreach (var asset in assets)
+                                {
+                                    <option value="@asset.Id">@asset.Name (@asset.Code)</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            <InputText class="form-control" @bind-Value="createModel.Title" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="createModel.Description" />
+                        </div>
+                        @if (modalError is not null)
+                        {
+                            <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal" disabled="@isCreating">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isCreating">
+                            @if (isCreating)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                            }
+                            Add
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---- Approve / confirm (acknowledge) modal ---- *@
+
+@if (incidentBeingAcknowledged is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="acknowledgeModel" OnValidSubmit="ConfirmAcknowledgeAsync">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title">Approve incident</h5>
+                        <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CloseAcknowledgeModal" disabled="@isAcknowledging"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            Approving <strong>@incidentBeingAcknowledged.Title</strong> — set the priority and add a note.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label">Priority</label>
+                            <InputSelect class="form-select" @bind-Value="acknowledgeModel.Priority">
+                                @foreach (var priority in Enum.GetValues<IncidentPriority>())
+                                {
+                                    <option value="@priority">@priority</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="acknowledgeModel.Description" />
+                        </div>
+                        @if (modalError is not null)
+                        {
+                            <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseAcknowledgeModal" disabled="@isAcknowledging">Cancel</button>
+                        <button type="submit" class="btn btn-success" disabled="@isAcknowledging">
+                            @if (isAcknowledging)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                            }
+                            Approve
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---- Toast (used for "Coming soon" on Edit/Delete, which aren't wired to the API yet) ---- *@
+
+@if (toastMessage is not null)
+{
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">
+        <div class="toast show align-items-center text-bg-dark border-0" role="status" aria-live="polite" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">@toastMessage</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" @onclick="() => toastMessage = null"></button>
+            </div>
+        </div>
+    </div>
+}
+
+@inject IServiceProvider ServiceProvider
+
+@code {
+    private HttpClient Api = default!;
+
+    private List<IncidentDto> incidents = new();
+    private List<AssetDto> assets = new();
+    private bool isLoading = true;
+    private string? loadError;
+    private string? modalError;
+    private string? toastMessage;
+    private CancellationTokenSource? toastCts;
+
+    // Delete (UI only)
+    private IncidentDto? incidentPendingDelete;
+
+    // Edit (UI only, title/description)
+    private IncidentDto? incidentBeingEdited;
+    private EditIncidentCommand editModel = new();
+
+    // Create
+    private bool isCreateModalOpen;
+    private AddIncidentCommand createModel = new();
+    private bool isCreating;
+
+    // Approve / confirm (acknowledge)
+    private IncidentDto? incidentBeingAcknowledged;
+    private AcknowledgeIncidentCommand acknowledgeModel = new();
+    private bool isAcknowledging;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Api = ServiceProvider.GetRequiredKeyedService<HttpClient>("Api");
+        await LoadIncidentsAsync();
+        await LoadAssetsAsync();
+    }
+
+    private async Task LoadIncidentsAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            incidents = await Api.GetFromJsonAsync<List<IncidentDto>>("api/Incidents", ApiJson.Options) ?? new();
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Failed to load incidents: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadAssetsAsync()
+    {
+        try
+        {
+            assets = await Api.GetFromJsonAsync<List<AssetDto>>("api/Assets", ApiJson.Options) ?? new();
+        }
+        catch
+        {
+            // Asset list is only needed for the Add-incident dropdown; a failure here shouldn't
+            // block viewing the incidents table.
+            assets = new();
+        }
+    }
+
+    // Bootstrap here is vendored at v5.1.0, which predates the "text-bg-*" badge utilities
+    // (added in 5.3) that pair a background with an auto-contrasting text color. On 5.1 those
+    // classes don't exist, so we spell out "bg-*" + "text-*" explicitly per color instead.
+    private static string PriorityBadgeClass(IncidentPriority priority) => priority switch
+    {
+        IncidentPriority.Low => "bg-secondary text-white",
+        IncidentPriority.Medium => "bg-info text-dark",
+        IncidentPriority.High => "bg-warning text-dark",
+        IncidentPriority.Critical => "bg-danger text-white",
+        _ => "bg-secondary text-white"
+    };
+
+    private static string StatusBadgeClass(IncidentStatus status) => status switch
+    {
+        IncidentStatus.Reported => "bg-secondary text-white",
+        IncidentStatus.Acknowledged => "bg-primary text-white",
+        IncidentStatus.InProgress => "bg-info text-dark",
+        IncidentStatus.Resolved => "bg-success text-white",
+        IncidentStatus.Closed => "bg-dark text-white",
+        _ => "bg-secondary text-white"
+    };
+
+    private void ShowToast(string message)
+    {
+        toastMessage = message;
+        toastCts?.Cancel();
+        toastCts = new CancellationTokenSource();
+        var token = toastCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(3000, token);
+                if (!token.IsCancellationRequested)
+                {
+                    toastMessage = null;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
+
+    // ---- Delete (UI only) ----
+
+    private void OpenDeleteModal(IncidentDto incident) => incidentPendingDelete = incident;
+
+    private void CloseDeleteModal() => incidentPendingDelete = null;
+
+    private void ConfirmDeleteAsync()
+    {
+        incidentPendingDelete = null;
+        ShowToast("Deleting incidents is coming soon.");
+    }
+
+    // ---- Edit (UI only, title/description) ----
+
+    private void OpenEditModal(IncidentDto incident)
+    {
+        incidentBeingEdited = incident;
+        editModel = new EditIncidentCommand
+        {
+            Title = incident.Title,
+            Description = incident.Description
+        };
+    }
+
+    private void CloseEditModal() => incidentBeingEdited = null;
+
+    private void SaveEditAsync()
+    {
+        incidentBeingEdited = null;
+        ShowToast("Editing incidents is coming soon.");
+    }
+
+    // ---- Create ----
+
+    private void OpenCreateModal()
+    {
+        isCreateModalOpen = true;
+        createModel = new AddIncidentCommand();
+        modalError = null;
+    }
+
+    private void CloseCreateModal()
+    {
+        isCreateModalOpen = false;
+        modalError = null;
+    }
+
+    private async Task CreateIncidentAsync()
+    {
+        if (createModel.AssetId == Guid.Empty)
+        {
+            modalError = "Please select an asset.";
+            return;
+        }
+
+        isCreating = true;
+        modalError = null;
+        try
+        {
+            var response = await Api.PostAsJsonAsync("api/Incidents", createModel, ApiJson.Options);
+            response.EnsureSuccessStatusCode();
+
+            await LoadIncidentsAsync();
+            isCreateModalOpen = false;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to create incident: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    // ---- Approve / confirm (acknowledge) ----
+
+    private void OpenAcknowledgeModal(IncidentDto incident)
+    {
+        incidentBeingAcknowledged = incident;
+        acknowledgeModel = new AcknowledgeIncidentCommand
+        {
+            Priority = incident.Priority,
+            Description = incident.Description
+        };
+        modalError = null;
+    }
+
+    private void CloseAcknowledgeModal()
+    {
+        incidentBeingAcknowledged = null;
+        modalError = null;
+    }
+
+    private async Task ConfirmAcknowledgeAsync()
+    {
+        if (incidentBeingAcknowledged is null)
+        {
+            return;
+        }
+
+        isAcknowledging = true;
+        modalError = null;
+        try
+        {
+            var response = await Api.PutAsJsonAsync(
+                $"api/Incidents/{incidentBeingAcknowledged.Id}/Acknowledge", acknowledgeModel, ApiJson.Options);
+            response.EnsureSuccessStatusCode();
+
+            await LoadIncidentsAsync();
+            incidentBeingAcknowledged = null;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to approve incident: {ex.Message}";
+        }
+        finally
+        {
+            isAcknowledging = false;
+        }
+    }
+}
