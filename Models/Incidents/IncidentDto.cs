@@ -1,4 +1,5 @@
 using IncidentTrackerUI.Models.Assets;
+using IncidentTrackerUI.Models.WorkOrders;
 
 namespace IncidentTrackerUI.Models.Incidents;
 
@@ -16,4 +17,5 @@ public class IncidentDto
     public DateTime? AcknowledgedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
     public DateTime? ClosedAt { get; set; }
+    public List<WorkOrderDto>? WorkOrders { get; set; }
 }

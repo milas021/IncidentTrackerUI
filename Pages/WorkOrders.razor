@@ -1,9 +1,376 @@
 @page "/work-orders"
+@using IncidentTrackerUI.Models.Incidents
+@using IncidentTrackerUI.Models.Teams
+@using IncidentTrackerUI.Models.Users
+@using IncidentTrackerUI.Models.WorkOrders
 
 <PageTitle>Work Orders</PageTitle>
 
 <h1>Work Orders</h1>
 
-<div class="alert alert-info" role="alert">
-    Coming Sonn...
+<div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-primary" @onclick="OpenCreateModal">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+        </svg>
+        Add Work Order
+    </button>
 </div>
+
+@if (loadError is not null)
+{
+    <div class="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
+        <span>@loadError</span>
+        <button class="btn btn-sm btn-outline-danger" @onclick="LoadAsync">Retry</button>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+        <span>Loading work orders...</span>
+    </div>
+}
+else if (loadError is null)
+{
+    @if (workOrders.Count == 0)
+    {
+        <div class="alert alert-secondary" role="alert">No work orders found.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Incident</th>
+                        <th>Description</th>
+                        <th>Team</th>
+                        <th>User</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var wo in workOrders)
+                    {
+                        <tr>
+                            <td>@(wo.Incident?.Title ?? "—")</td>
+                            <td>@(string.IsNullOrWhiteSpace(wo.Description) ? "—" : wo.Description)</td>
+                            <td>@(wo.AssignedTeam?.Name ?? "-")</td>
+                            <td>@(wo.AssignedUser?.FullName ?? "-" )</td>
+                            <td><span class="badge bg-secondary text-white">@wo.Status</span></td>
+                            <td>@wo.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenAssignModal(wo)">
+                                    Change owner
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@* ---- Add work order modal ---- *@
+
+@if (isCreateModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="createModel" OnValidSubmit="AddWorkOrder">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add work order</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseCreateModal" disabled="@isSaving"></button>
+                    </div>
+                    <div class="modal-body">
+                        <ValidationSummary class="text-danger" />
+                        <div class="mb-3">
+                            <label class="form-label">Incident</label>
+                            <InputSelect class="form-select" @bind-Value="createModel.IncidentId">
+                                <option value="@Guid.Empty">Select an incident...</option>
+                                @foreach (var incident in incidents)
+                                {
+                                    <option value="@incident.Id">@incident.Title</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" rows="2" @bind-Value="createModel.Description" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Assign to</label>
+                            <select class="form-select mb-2" value="@createModel.AssignedTeamId" @onchange="OnCreateTeamChanged">
+                                <option value="">No team</option>
+                                @foreach (var team in teams)
+                                {
+                                    <option value="@team.Id">@team.Name</option>
+                                }
+                            </select>
+                            <select class="form-select" value="@createModel.AssignedUserId" @onchange="OnCreateUserChanged">
+                                <option value="">No user</option>
+                                @foreach (var user in assignableUsers)
+                                {
+                                    <option value="@user.Id">@user.FullName</option>
+                                }
+                            </select>
+                        </div>
+                        @if (modalError is not null)
+                        {
+                            <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal" disabled="@isSaving">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                            }
+                            Add
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---- Change owner modal ---- *@
+
+@if (workOrderBeingAssigned is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change owner</h5>
+                    <button type="button" class="btn-close" aria-label="Close" @onclick="CloseAssignModal" disabled="@isSaving"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Team</label>
+                        <select class="form-select" value="@assignTeamId" @onchange="e => assignTeamId = ParseGuid(e.Value)">
+                            <option value="">Unassigned</option>
+                            @foreach (var team in teams)
+                            {
+                                <option value="@team.Id">@team.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">User</label>
+                        <select class="form-select" value="@assignUserId" @onchange="e => assignUserId = ParseGuid(e.Value)">
+                            <option value="">Unassigned</option>
+                            @foreach (var user in assignableUsers)
+                            {
+                                <option value="@user.Id">@user.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    @if (modalError is not null)
+                    {
+                        <div class="alert alert-danger py-2 mb-0">@modalError</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAssignModal" disabled="@isSaving">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmAssignAsync" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                        }
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@inject IServiceProvider ServiceProvider
+
+@code {
+    private HttpClient Api = default!;
+
+    private List<WorkOrderDto> workOrders = new();
+    private List<IncidentDto> incidents = new();
+    private List<TeamDto> teams = new();
+    private List<UserDto> assignableUsers = new();
+    private bool isLoading = true;
+    private string? loadError;
+    private string? modalError;
+    private bool isSaving;
+
+    // Create
+    private bool isCreateModalOpen;
+    private AddWorkOrderCommand createModel = new();
+
+    // Change owner
+    private WorkOrderDto? workOrderBeingAssigned;
+    private Guid? assignTeamId;
+    private Guid? assignUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Api = ServiceProvider.GetRequiredKeyedService<HttpClient>("Api");
+        await LoadAsync();
+        await LoadLookupsAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            // No list endpoint for work orders — they come back nested on incidents.
+            incidents = await Api.GetFromJsonAsync<List<IncidentDto>>("api/Incidents", ApiJson.Options) ?? new();
+            workOrders = await Api.GetFromJsonAsync<List<WorkOrderDto>>("api/workorders", ApiJson.Options)?? new List<WorkOrderDto>();
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Failed to load work orders: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            teams = await Api.GetFromJsonAsync<List<TeamDto>>("api/Team", ApiJson.Options) ?? new();
+        }
+        catch { teams = new(); }
+        try
+        {
+            assignableUsers = await Api.GetFromJsonAsync<List<UserDto>>("api/Users", ApiJson.Options) ?? new();
+        }
+        catch { assignableUsers = new(); }
+    }
+
+    private static string OwnerLabel(WorkOrderDto wo)
+    {
+        var parts = new List<string>();
+        if (wo.AssignedTeam?.Name is { } t) parts.Add($"Team: {t}");
+        if (wo.AssignedUser?.FullName is { } u) parts.Add($"User: {u}");
+        return parts.Count > 0 ? string.Join(" · ", parts) : "Unassigned";
+    }
+
+    private static Guid? ParseGuid(object? value) =>
+        Guid.TryParse(value?.ToString(), out var g) ? g : null;
+
+    // ---- Create ----
+
+    private void OpenCreateModal()
+    {
+        isCreateModalOpen = true;
+        createModel = new AddWorkOrderCommand();
+        modalError = null;
+    }
+
+    private void CloseCreateModal()
+    {
+        isCreateModalOpen = false;
+        modalError = null;
+    }
+
+    private void OnCreateTeamChanged(ChangeEventArgs e) => createModel.AssignedTeamId = ParseGuid(e.Value);
+
+    private void OnCreateUserChanged(ChangeEventArgs e) => createModel.AssignedUserId = ParseGuid(e.Value);
+
+    private async Task AddWorkOrder()
+    {
+        if (createModel.IncidentId == Guid.Empty)
+        {
+            modalError = "Please select an incident.";
+            return;
+        }
+
+        isSaving = true;
+        modalError = null;
+        try
+        {
+            var response = await Api.PostAsJsonAsync("api/WorkOrders", createModel, ApiJson.Options);
+            response.EnsureSuccessStatusCode();
+
+            await LoadAsync();
+            isCreateModalOpen = false;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to create work order: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ---- Change owner ----
+
+    private void OpenAssignModal(WorkOrderDto wo)
+    {
+        workOrderBeingAssigned = wo;
+        assignTeamId = wo.AssignedTeamId;
+        assignUserId = wo.AssignedUserId;
+        modalError = null;
+    }
+
+    private void CloseAssignModal()
+    {
+        workOrderBeingAssigned = null;
+        modalError = null;
+    }
+
+    private async Task ConfirmAssignAsync()
+    {
+        if (workOrderBeingAssigned is null)
+        {
+            return;
+        }
+
+        var id = workOrderBeingAssigned.Id;
+        isSaving = true;
+        modalError = null;
+        try
+        {
+            if (assignTeamId is { } teamId && teamId != workOrderBeingAssigned.AssignedTeamId)
+            {
+                var res = await Api.PutAsJsonAsync($"api/WorkOrders/{id}/assign-team",
+                    new AssignWorkOrderToTeamCommand { TeamId = teamId }, ApiJson.Options);
+                res.EnsureSuccessStatusCode();
+            }
+
+            if (assignUserId is { } userId && userId != workOrderBeingAssigned.AssignedUserId)
+            {
+                var res = await Api.PutAsJsonAsync($"api/WorkOrders/{id}/assign-user",
+                    new AssignWorkOrderToUserCommand { UserId = userId }, ApiJson.Options);
+                res.EnsureSuccessStatusCode();
+            }
+
+            await LoadAsync();
+            workOrderBeingAssigned = null;
+        }
+        catch (Exception ex)
+        {
+            modalError = $"Failed to change owner: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
